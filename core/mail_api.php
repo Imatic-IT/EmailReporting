@@ -727,6 +727,7 @@ class ERP_mailbox_api
 		$t_email[ 'Message-ID' ] = $t_mp->messageid();
 		$t_email[ 'References' ] = $t_mp->references();
 		$t_email[ 'In-Reply-To' ] = $t_mp->inreplyto();
+		$t_email['headers'] = $t_mp->headers;
 
 		$this->show_memory_usage( 'Finished Mail Parser' );
 
@@ -932,6 +933,26 @@ class ERP_mailbox_api
 					return;
 				}
 			}
+
+			$assigned = $p_email['headers']['x-mantis-assigned'] ?? null;
+			if ($assigned) {
+				$assignedId = $this->get_user($this->parse_from_field($assigned));
+				if ($assignedId !== false) {
+					bug_set_field($t_bug_id, 'handler_id', $assignedId);
+				}
+			}
+			$state = $p_email['headers']['x-mantis-state'] ?? null;
+			if ($state) {
+				$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
+				$newStatus = $statusMap[$state] ?? null;
+				if ($newStatus) {
+					bug_set_field($t_bug_id, 'status', $newStatus);
+				}
+			}
+			$time = $p_email['headers']['x-mantis-time'] ?? null;
+			if ($time) {
+				// todo: insert time
+			}
 		}
 		elseif ( $this->_mail_add_bug_reports )
 		{
@@ -1017,6 +1038,26 @@ class ERP_mailbox_api
 				# Allow plugins to pre-process bug data
 				$t_bug_data = event_signal( 'EVENT_REPORT_BUG_DATA', $t_bug_data );
 				$t_bug_data = event_signal( 'EVENT_ERP_REPORT_BUG_DATA', $t_bug_data );
+				
+				$assigned = $p_email['headers']['x-mantis-assigned'] ?? null;
+				if ($assigned) {
+					$assignedId = $this->get_user($this->parse_from_field($assigned));
+					if ($assignedId !== false) {
+						$t_bug_data->handler_id = $assignedId;
+					}
+				}
+				$state = $p_email['headers']['x-mantis-state'] ?? null;
+				if ($state) {
+					$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
+					$newStatus = $statusMap[$state] ?? null;
+					if ($newStatus) {
+						$t_bug_data->status = $newStatus;
+					}
+				}
+				$time = $p_email['headers']['x-mantis-time'] ?? null;
+				if ($time) {
+					// todo: insert time
+				}
 
 				# Create the bug
 				$t_bug_id = $t_bug_data->create();

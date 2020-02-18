@@ -40,6 +40,8 @@ class ERP_Mail_Parser
 
 	private $_mb_list_encodings = array();
 
+    public $headers = [];
+
 	/**
 	* Based on horde-3.3.13 function _mbstringCharset
 	*
@@ -384,6 +386,15 @@ class ERP_Mail_Parser
 		if ( isset( $structure->headers[ 'cc' ] ) )
 		{
 			$this->setCc( $structure->headers[ 'cc' ] );
+		}
+
+		$headers = array_intersect_key(
+			$structure->headers,
+			array_flip(['x-mantis-time', 'x-mantis-state', 'x-mantis-assigned'])
+		);
+
+		foreach ($headers as $name => $value) {
+			$this->headers[$name] = $this->process_header_encoding($value);
 		}
 
 		/*
