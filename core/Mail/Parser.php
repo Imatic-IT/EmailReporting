@@ -19,6 +19,7 @@ class ERP_Mail_Parser
 	private $_show_mem_usage = FALSE;
 	private $_memory_limit = FALSE;
 	private $_mailbox_starttime = NULL;
+	private $_parse_headers = array();
 
 	private $_file;
 	private $_content;
@@ -39,6 +40,8 @@ class ERP_Mail_Parser
 	private $_is_auto_reply = FALSE;
 
 	private $_mb_list_encodings = array();
+
+	private $_headers = array();
 
 	/**
 	* Based on horde-3.3.13 function _mbstringCharset
@@ -70,6 +73,9 @@ class ERP_Mail_Parser
 		$this->_debug = $options[ 'debug' ];
 		$this->_show_mem_usage = $options[ 'show_mem_usage' ];
 		$this->_mailbox_starttime = $mailbox_starttime;
+		if ( isset( $options['headers'] ) ) {
+			$this->_parse_headers = $options['headers'];
+		}
 
 		$this->prepare_mb_list_encodings();
 
@@ -310,6 +316,11 @@ class ERP_Mail_Parser
 		return( $this->_body );
 	}
 
+	public function headers()
+	{
+		return( $this->_headers );
+	}
+
 	public function parts()
 	{
 		return( $this->_parts );
@@ -384,6 +395,15 @@ class ERP_Mail_Parser
 		if ( isset( $structure->headers[ 'cc' ] ) )
 		{
 			$this->setCc( $structure->headers[ 'cc' ] );
+		}
+
+		$headers = array_intersect_key(
+			$structure->headers,
+			array_flip( $this->_parse_headers )
+		);
+
+		foreach ($headers as $name => $value) {
+			$this->_headers[$name] = $this->process_header_encoding( $value );
 		}
 
 		/*

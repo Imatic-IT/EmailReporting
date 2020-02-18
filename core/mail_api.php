@@ -676,7 +676,8 @@ class ERP_mailbox_api
 	{
 		$this->show_memory_usage( 'Start Mail Parser' );
 
-		$t_mp = new ERP_Mail_Parser( $this->_mp_options, $this->_mailbox_starttime );
+		$t_custom_options = event_signal( 'EVENT_ERP_PARSER_OPTIONS', array( 'headers' => array () ) );
+		$t_mp = new ERP_Mail_Parser( array_merge( $t_custom_options, $this->_mp_options ), $this->_mailbox_starttime );
 
 		$t_mp->setInputString( $p_msg );
 
@@ -727,6 +728,7 @@ class ERP_mailbox_api
 		$t_email[ 'Message-ID' ] = $t_mp->messageid();
 		$t_email[ 'References' ] = $t_mp->references();
 		$t_email[ 'In-Reply-To' ] = $t_mp->inreplyto();
+		$t_email['headers'] = $t_mp->headers();
 
 		$this->show_memory_usage( 'Finished Mail Parser' );
 
@@ -932,6 +934,8 @@ class ERP_mailbox_api
 					return;
 				}
 			}
+
+			event_signal( 'EVENT_ERP_UPDATE_BUG', null, array( $t_bug_id, $p_email ) );
 		}
 		elseif ( $this->_mail_add_bug_reports )
 		{
@@ -1073,6 +1077,8 @@ class ERP_mailbox_api
 
 				# Allow plugins to post-process bug data with the new bug ID
 				event_signal( 'EVENT_REPORT_BUG', array( $t_bug_data, $t_bug_id ) );
+
+				event_signal( 'EVENT_ERP_REPORT_BUG', null, array( $t_bug_id, $p_email ) );
 
 				email_bug_added( $t_bug_id );
 			}
