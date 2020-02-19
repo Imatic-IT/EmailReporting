@@ -277,6 +277,8 @@ class EmailReportingPlugin extends MantisPlugin
 			'EVENT_ERP_REPORT_BUG' => EVENT_TYPE_CHAIN,
 
 			'EVENT_ERP_UPDATE_BUG' => EVENT_TYPE_CHAIN,
+
+			'EVENT_ERP_PARSER_OPTIONS' => EVENT_TYPE_CHAIN,
 		);
 	}
 
