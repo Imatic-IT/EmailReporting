@@ -849,7 +849,7 @@ class ERP_mailbox_api
 		return( $t_reporter_id );
 	}
 
-	private function imatic_process_headers(&$p_email, $p_bug_id)
+	private function imatic_process_headers(&$p_email, $p_bug_id, $p_new)
 	{
 		global $g_minimum_add_timetrack_for_issue_permissions;
 
@@ -863,7 +863,11 @@ class ERP_mailbox_api
 		if ($assigned && access_has_bug_level(BUG_UPDATE_TYPE_ASSIGN, $p_bug_id, $t_user_id)) {
 			$assignedId = $this->get_user($this->parse_from_field($assigned));
 			if ($assignedId !== false) {
-				bug_set_field($p_bug_id, 'handler_id', $assignedId);
+				if ($p_new) {
+					bug_set_field($p_bug_id, 'handler_id', $assignedId);
+				} else {
+					bug_assign($p_bug_id, $assignedId);
+				}
 			}
 		}
 
@@ -979,7 +983,7 @@ class ERP_mailbox_api
 				}
 			}
 
-			$this->imatic_process_headers($p_email, $t_bug_id);
+			$this->imatic_process_headers($p_email, $t_bug_id, false);
 		}
 		elseif ( $this->_mail_add_bug_reports )
 		{
@@ -1123,7 +1127,7 @@ class ERP_mailbox_api
 				# Allow plugins to post-process bug data with the new bug ID
 				event_signal( 'EVENT_REPORT_BUG', array( $t_bug_data, $t_bug_id ) );
 
-				$this->imatic_process_headers($p_email, $t_bug_id);
+				$this->imatic_process_headers($p_email, $t_bug_id, true);
 
 				email_bug_added( $t_bug_id );
 			}
