@@ -12,6 +12,7 @@
 	require_api( 'bugnote_api.php' );
 	require_api( 'user_api.php' );
 	require_api( 'file_api.php' );
+	require_api( 'access_api.php' );
 
 	require_once( config_get_global( 'absolute_path' ) . 'api/soap/mc_file_api.php' );
 
@@ -27,6 +28,9 @@
 	plugin_require_api( 'core/EmailReplyParser/Parser/FragmentDTO.php');
 	plugin_require_api( 'core/EmailReplyParser/Email.php');
 	plugin_require_api( 'core/EmailReplyParser/Fragment.php');
+
+	plugin_require_api('src/Helper/Formatter.php', 'ImaticTimetrack_v2');
+	plugin_require_api('src/Repository/TimetrackRepository.php', 'ImaticTimetrack_v2');
 
 class ERP_mailbox_api
 {
@@ -845,6 +849,47 @@ class ERP_mailbox_api
 		return( $t_reporter_id );
 	}
 
+	private function imatic_process_headers(&$p_email, $p_bug_id)
+	{
+		global $g_minimum_add_timetrack_for_issue_permissions;
+
+		$t_user_email = $p_email['From_parsed'][ 'email' ] ?? null;
+		$t_user_id = $this->get_userid_from_email($t_user_email);
+		if ($t_user_id === false) {
+			return;
+		}
+
+		$assigned = $p_email['headers']['x-mantis-assigned'] ?? null;
+		if ($assigned && access_has_bug_level(BUG_UPDATE_TYPE_ASSIGN, $p_bug_id, $t_user_id)) {
+			$assignedId = $this->get_user($this->parse_from_field($assigned));
+			if ($assignedId !== false) {
+				bug_set_field($p_bug_id, 'handler_id', $assignedId);
+			}
+		}
+
+		$state = $p_email['headers']['x-mantis-state'] ?? null;
+		if ($state && access_has_bug_level(BUG_UPDATE_TYPE_CHANGE_STATUS, $p_bug_id, $t_user_id)) {
+			$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
+			$newStatus = $statusMap[$state] ?? null;
+			if ($newStatus) {
+				bug_set_field($p_bug_id, 'status', $newStatus);
+			}
+		}
+
+		$time = $p_email['headers']['x-mantis-time'] ?? null;
+		if ($time && access_has_global_level($g_minimum_add_timetrack_for_issue_permissions, $t_user_id)) {
+			$t_bugnote_id = bugnote_add($p_bug_id, '.');
+			if (\App\Helper\Formatter::checkHourFormat($time)) {
+				App\Repository\TimetrackRepository::insertTimetrack(
+					$t_bugnote_id,
+					0,
+					(new \DateTime())->format(\App\Helper\Formatter::DB_DATE_FORMAT),
+					\App\Helper\Formatter::parseTimeToMinutes($time)
+				);
+			}
+		}
+	}
+
 	# --------------------
 	# Adds a bug which is reported via email
 	# Taken from bug_report.php in MantisBT 1.2.0
@@ -934,25 +979,7 @@ class ERP_mailbox_api
 				}
 			}
 
-			$assigned = $p_email['headers']['x-mantis-assigned'] ?? null;
-			if ($assigned) {
-				$assignedId = $this->get_user($this->parse_from_field($assigned));
-				if ($assignedId !== false) {
-					bug_set_field($t_bug_id, 'handler_id', $assignedId);
-				}
-			}
-			$state = $p_email['headers']['x-mantis-state'] ?? null;
-			if ($state) {
-				$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
-				$newStatus = $statusMap[$state] ?? null;
-				if ($newStatus) {
-					bug_set_field($t_bug_id, 'status', $newStatus);
-				}
-			}
-			$time = $p_email['headers']['x-mantis-time'] ?? null;
-			if ($time) {
-				// todo: insert time
-			}
+			$this->imatic_process_headers($p_email, $t_bug_id);
 		}
 		elseif ( $this->_mail_add_bug_reports )
 		{
@@ -1038,29 +1065,10 @@ class ERP_mailbox_api
 				# Allow plugins to pre-process bug data
 				$t_bug_data = event_signal( 'EVENT_REPORT_BUG_DATA', $t_bug_data );
 				$t_bug_data = event_signal( 'EVENT_ERP_REPORT_BUG_DATA', $t_bug_data );
-				
-				$assigned = $p_email['headers']['x-mantis-assigned'] ?? null;
-				if ($assigned) {
-					$assignedId = $this->get_user($this->parse_from_field($assigned));
-					if ($assignedId !== false) {
-						$t_bug_data->handler_id = $assignedId;
-					}
-				}
-				$state = $p_email['headers']['x-mantis-state'] ?? null;
-				if ($state) {
-					$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
-					$newStatus = $statusMap[$state] ?? null;
-					if ($newStatus) {
-						$t_bug_data->status = $newStatus;
-					}
-				}
-				$time = $p_email['headers']['x-mantis-time'] ?? null;
-				if ($time) {
-					// todo: insert time
-				}
 
 				# Create the bug
 				$t_bug_id = $t_bug_data->create();
+
 				// MantisBT 1.3.x function
 				if ( method_exists( $t_bug_data, 'process_mentions' ) )
 				{
@@ -1114,6 +1122,8 @@ class ERP_mailbox_api
 
 				# Allow plugins to post-process bug data with the new bug ID
 				event_signal( 'EVENT_REPORT_BUG', array( $t_bug_data, $t_bug_id ) );
+
+				$this->imatic_process_headers($p_email, $t_bug_id);
 
 				email_bug_added( $t_bug_id );
 			}
