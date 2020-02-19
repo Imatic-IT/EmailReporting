@@ -849,6 +849,46 @@ class ERP_mailbox_api
 		return( $t_reporter_id );
 	}
 
+	private function imatic_status_label($p_label)
+	{
+		return trim(strtolower($p_label));
+	}
+
+	private function imatic_status_map()
+	{
+		$t_status_map = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
+		$t_labels = array_map(function($p_label) {
+			return $this->imatic_status_label($p_label);
+		}, array_keys($t_status_map));
+
+		return array_combine($t_labels, array_values($t_status_map));
+	}
+
+	private function imatic_status_from_header($p_status)
+	{
+		$t_status_map = $this->imatic_status_map();
+
+		$t_status = $this->imatic_status_label($p_status);
+		$t_new_status = $t_status_map[$t_status] ?? null;
+		if ($t_new_status) {
+			return $t_new_status;
+		}
+
+		$t_status_len = strlen($t_status);
+		$matches = array_filter(
+			array_keys($t_status_map),
+			function ($p_label) use ($t_status_len, $t_status) {
+				return substr($p_label, 0, $t_status_len) === $t_status;
+			}
+		);
+
+		if (count($matches) === 1) {
+			return $t_status_map[reset($matches)];
+		}
+
+		return null;
+	}
+
 	private function imatic_process_headers(&$p_email, $p_bug_id, $p_new)
 	{
 		global $g_minimum_add_timetrack_for_issue_permissions;
@@ -873,8 +913,7 @@ class ERP_mailbox_api
 
 		$state = $p_email['headers']['x-mantis-state'] ?? null;
 		if ($state && access_has_bug_level(BUG_UPDATE_TYPE_CHANGE_STATUS, $p_bug_id, $t_user_id)) {
-			$statusMap = MantisEnum::getAssocArrayIndexedByLabels(config_get('status_enum_string'));
-			$newStatus = $statusMap[$state] ?? null;
+			$newStatus = $this->imatic_status_from_header($state);
 			if ($newStatus) {
 				bug_set_field($p_bug_id, 'status', $newStatus);
 			}
