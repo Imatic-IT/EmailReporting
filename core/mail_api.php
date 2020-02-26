@@ -883,6 +883,7 @@ class ERP_mailbox_api
 			# Event integration
 			# Core mantis event already exists within bugnote_add function
 			$t_description = event_signal( 'EVENT_ERP_BUGNOTE_DATA', $t_description, $t_bug_id );
+			$t_description = event_signal( 'EVENT_ERP_DESCRIPTION', array( $t_description, $p_email ) );
 
 			# Check reopen permissions
 			$t_bug = bug_get( $t_bug_id, true );
@@ -983,6 +984,7 @@ class ERP_mailbox_api
 				$t_description = $p_email[ 'X-Mantis-Body' ];
 				$t_description = $this->add_additional_info( 'issue', $p_email, $t_description );
 				$t_description = $this->limit_body_size( 'description', $t_description, $p_email );
+				$t_description = event_signal( 'EVENT_ERP_DESCRIPTION', array( $t_description, $p_email ) );
 				$t_bug_data->description			= $t_description;
 
 				$t_bug_data->steps_to_reproduce		= config_get( 'default_bug_steps_to_reproduce' );
