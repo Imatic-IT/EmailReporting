@@ -1457,13 +1457,6 @@ class ERP_mailbox_api
 	# return bug_id if there is a valid mantis bug refererence in subject, reference header or return false if not found
 	private function mail_is_a_bugnote( $p_mail_subject, $p_references )
 	{
-		$t_bug_id = $this->get_bug_id_from_subject( $p_mail_subject );
-
-		if ( $t_bug_id !== FALSE && bug_exists( $t_bug_id ) )
-		{
-			return( $t_bug_id );
-		}
-
 		//Get the ids from Mail References(header)
 		$t_bug_id = $this->get_bug_id_from_references( $p_references );
 
@@ -1479,6 +1472,13 @@ class ERP_mailbox_api
 				// Do a clean up of the table to avoid inconsistencies.
 				self::clean_references_for_deleted_issues();
 			}
+		}
+
+		$t_bug_id = $this->get_bug_id_from_subject( $p_mail_subject );
+
+		if ( $t_bug_id !== FALSE && bug_exists( $t_bug_id ) )
+		{
+			return( $t_bug_id );
 		}
 
 		return( FALSE );
