@@ -39,7 +39,7 @@ if ( !extension_loaded( 'mbstring' ) )
 }
 
 // Output utf8 info box
-elseif ( $t_results_utf_test = test_database_utf8() )
+elseif ( $t_results_utf_test = ERP_test_database_utf8() )
 {
 	ERP_output_note_open();
 ?>
@@ -177,6 +177,7 @@ ERP_output_table_open( 'debug_options' );
 ERP_output_config_option( 'mail_debug', 'boolean' );
 ERP_output_config_option( 'mail_debug_directory', 'directory_string' );
 ERP_output_config_option( 'mail_add_complete_email', 'boolean' );
+ERP_output_config_option( 'mail_add_complete_email_ext', 'string' );
 ERP_output_config_option( 'mail_debug_show_memory_usage', 'boolean' );
 ERP_output_table_close();
 

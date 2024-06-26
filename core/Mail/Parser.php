@@ -30,7 +30,7 @@ class ERP_Mail_Parser
 	private $_subject;
 	private $_def_charset = 'auto';
 	private $_fallback_charset = 'ASCII';
-	private $_priority = NULL;
+	private $_priority = '';
 	private $_messageid;
 	private $_references = array();
 	private $_inreplyto;
@@ -92,6 +92,8 @@ class ERP_Mail_Parser
 			$this->_encoding = mb_internal_encoding();
 
 			$t_charset_list = mb_list_encodings();
+
+			$t_charset_list = array_diff( $t_charset_list, array( 'BASE64', 'UUENCODE', 'HTML-ENTITIES', 'Quoted-Printable' ) );
 
 			// This function does not exist in version older then PHP 5.3.0
 			if ( function_exists( 'mb_encoding_aliases' ) )
@@ -407,16 +409,18 @@ class ERP_Mail_Parser
 		}
 
 		/*
-		 * check if the email is an out of the office auto reply by checking the following fields:
-		 * X-Autoreply
-		 * X-Autorespond
-		 * auto-submitted with a value of "auto-replied"
-		 * Based on: https://www.jitbit.com/maxblog/18-detecting-outlook-autoreplyout-of-office-emails-and-x-auto-response-suppress-header/
+		 * check if the email is an out of office auto reply:
+		 * Based on:
+		 * - https://www.jitbit.com/maxblog/18-detecting-outlook-autoreplyout-of-office-emails-and-x-auto-response-suppress-header/
+		 * - https://stackoverflow.com/questions/9426801/detect-auto-reply-emails-programmatically
+		 * - https://www.arp242.net/autoreply.html
 		*/
 		if (
 			isset( $structure->headers[ 'x-autoreply' ] )
 			|| isset( $structure->headers[ 'x-autorespond' ] )
-			|| ( isset( $structure->headers[ 'auto-submitted' ] ) && $structure->headers[ 'auto-submitted' ] == 'auto-replied' )
+			|| isset( $structure->headers[ 'x-ag-autoreply' ] )
+			|| ( isset( $structure->headers[ 'auto-submitted' ] ) && $structure->headers[ 'auto-submitted' ] !== 'no' )
+			|| ( isset( $structure->headers[ 'precedence' ] ) && $structure->headers[ 'precedence' ] === 'auto_reply' )
 		)
 		{
 			$this->setAutoReply( TRUE );
@@ -445,22 +449,22 @@ class ERP_Mail_Parser
 
 	private function setMessageId( $p_messageid )
 	{
-		$this->_messageid = trim( $p_messageid );
+		$this->_messageid = trim( (string)$p_messageid );
 	}
 
 	private function setReferences( $p_references )
 	{
-		// Some email clients or servers malform the references mime header. They mix comma and space as separators while it should have been a space
-		$t_references = str_replace( '>,<', '> <', $p_references );
-		$t_references = explode( ' ', $t_references );
-		$references = array_map( 'trim', $t_references );
+		// Some email servers mishandle the references header and split one ID over multiple lines causing an extra space
+		$t_references = str_replace( ' ', '', $p_references );
+		preg_match_all( '/<\S*?>/m', $t_references, $t_matches );
+		$references = array_map( 'trim', $t_matches[ 0 ] );
 
 		$this->_references = $references;
 	}
 
 	private function setInReplyTo( $p_inreplyto )
 	{
-		$this->_inreplyto = trim( $p_inreplyto );
+		$this->_inreplyto = trim( (string)$p_inreplyto );
 	}
 
 	private function setPriority( $priority )
@@ -494,7 +498,7 @@ class ERP_Mail_Parser
 		$body = str_replace(array("\r\n", "\r"), "\n", $body);
 		$body = $this->process_body_encoding( $body, $charset );
 
-		if ( 'text' === $this->_ctype['primary'] &&	'plain' === $this->_ctype['secondary'] )
+		if ( 'text' === $this->_ctype['primary'] && 'plain' === $this->_ctype['secondary'] )
 		{
 			// We need to escape any markdown characters present for plaintext emails
 			if ( $this->_process_markdown )
@@ -530,7 +534,7 @@ class ERP_Mail_Parser
 			return( FALSE );
 		}
 
-		$this->_body = trim( $this->_body );
+		$this->_body = trim( (string)$this->_body );
 
 		return( TRUE );
 	}

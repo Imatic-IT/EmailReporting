@@ -41,6 +41,7 @@ $s_plugin_EmailReporting_directory_unwritable = 'Achtung: Order nicht schreibbar
 $s_plugin_EmailReporting_mail_add_bug_reports = 'Erstelle ein neues Ticket';
 $s_plugin_EmailReporting_mail_add_bugnotes = 'Notiz hinzufügen';
 $s_plugin_EmailReporting_mail_add_complete_email = 'Komplette Email als Anhang dem Ticket hinzufügen';
+$s_plugin_EmailReporting_mail_add_complete_email_ext = 'Extension used for the complete email attachment'; //TODO Needs translation
 $s_plugin_EmailReporting_mail_add_users_from_cc_to = 'Füge Benutzer aus den To- und Cc-Feldern als Beobachter hinzu';
 $s_plugin_EmailReporting_mail_auto_signup = 'Neue Benutzer automatisch registrieren (mögliches Sicherheitsrisiko! Dokumentation konsultieren!';
 $s_plugin_EmailReporting_mail_block_attachments_md5 = 'Anhänge blockieren die folgenden MD5 Hashes entsprechen';
@@ -53,7 +54,7 @@ $s_plugin_EmailReporting_mail_delete = 'Lösche verarbeitete Mails aus dem Mailk
 $s_plugin_EmailReporting_mail_disposable_email_checker = 'MantisBT-Prüfer für Wegwerf-Emailadressen';
 $s_plugin_EmailReporting_mail_email_receive_own = 'Sollen Benutzer Emails für ihre eigenen Aktionen erhalten? (Nicht verfügbar wenn email_receive_own = ON)';
 $s_plugin_EmailReporting_mail_fallback_mail_reporter = 'Verwende den Standard Reporter als Backup';
-$s_plugin_EmailReporting_mail_ignore_auto_replies = 'Ignore auto-reply emails'; /* TODO Need translation */
+$s_plugin_EmailReporting_mail_ignore_auto_replies = 'Ignorieren Sie automatische Antwort-E-Mails';
 $s_plugin_EmailReporting_mail_max_email_body = 'Maximale Größe der Beschreibung oder der Notiz, die zum Eintrag hinzugefügt wird';
 $s_plugin_EmailReporting_mail_max_email_body_text = 'Den folgenden Text verwenden, falls die Beschreibung oder die Notiz abgeschnitten wurde';
 $s_plugin_EmailReporting_mail_max_email_body_add_attach = 'Die komplette Beschreibung oder Notiz als Anhang hinzufügen, falls abgeschnitten wurde';
