@@ -54,6 +54,7 @@ class ERP_mailbox_api
 	private $_mail_add_bug_reports;
 	private $_mail_add_bugnotes;
 	private $_mail_add_complete_email;
+	private $_mail_add_complete_email_ext;
 	private $_mail_add_users_from_cc_to;
 	private $_mail_auto_signup;
 	private $_mail_block_attachments_md5;
@@ -107,6 +108,7 @@ class ERP_mailbox_api
 		$this->_mail_add_bug_reports			= plugin_config_get( 'mail_add_bug_reports' );
 		$this->_mail_add_bugnotes				= plugin_config_get( 'mail_add_bugnotes' );
 		$this->_mail_add_complete_email			= plugin_config_get( 'mail_add_complete_email' );
+		$this->_mail_add_complete_email_ext		= plugin_config_get( 'mail_add_complete_email_ext' );
 		$this->_mail_add_users_from_cc_to		= plugin_config_get( 'mail_add_users_from_cc_to' );
 		$this->_mail_auto_signup				= plugin_config_get( 'mail_auto_signup' );
 		$this->_mail_block_attachments_md5		= plugin_config_get( 'mail_block_attachments_md5' );
@@ -237,8 +239,6 @@ class ERP_mailbox_api
 
 							if ( $t_upload_folder_passed )
 							{
-								$this->prepare_mailbox_hostname();
-
 								if ( !$this->_test_only && $this->_mail_debug )
 								{
 									var_dump( $this->_mailbox );
@@ -246,6 +246,8 @@ class ERP_mailbox_api
 								}
 
 								$this->show_memory_usage( 'Start process mailbox' );
+
+								$this->prepare_mailbox_hostname();
 
 								$t_process_mailbox_function = 'process_' . strtolower( $this->_mailbox[ 'mailbox_type' ] ) . '_mailbox';
 
@@ -338,7 +340,7 @@ class ERP_mailbox_api
 
 		if ( $t_connectresult === TRUE )
 		{
-			$t_loginresult = $this->mailbox_login();
+			$t_loginresult = $this->PEAR_mailbox_login();
 
 			if ( !$this->pear_error( 'Attempt login', $t_loginresult ) )
 			{
@@ -346,7 +348,7 @@ class ERP_mailbox_api
 				{
 					if ( project_get_field( $this->_mailbox[ 'project_id' ], 'enabled' ) == ON )
 					{
-						$t_ListMsgs = $this->getListing();
+						$t_ListMsgs = $this->PEAR_getListing();
 
 						if ( !$this->pear_error( 'Retrieve list of messages', $t_ListMsgs ) )
 						{
@@ -392,7 +394,7 @@ class ERP_mailbox_api
 
 		if ( $this->_mailserver->_connected === TRUE )
 		{
-			$t_loginresult = $this->mailbox_login();
+			$t_loginresult = $this->PEAR_mailbox_login();
 
 			if ( !$this->pear_error( 'Attempt login', $t_loginresult ) )
 			{
@@ -425,7 +427,7 @@ class ERP_mailbox_api
 							{
 								$t_project_name = $this->cleanup_project_name( $t_project[ 'name' ] );
 
-								$t_foldername = $this->_mailbox[ 'imap_basefolder' ] . ( ( $this->_mailbox[ 'imap_createfolderstructure' ] ) ? $t_hierarchydelimiter . $t_project_name : NULL );
+								$t_foldername = str_replace( '/', $t_hierarchydelimiter, $this->_mailbox[ 'imap_basefolder' ] ) . ( ( $this->_mailbox[ 'imap_createfolderstructure' ] ) ? $t_hierarchydelimiter . $t_project_name : NULL );
 
 								// We don't need to check twice whether the mailbox exist incase createfolderstructure is false
 								if ( !$this->_mailbox[ 'imap_createfolderstructure' ] || $this->_mailserver->mailboxExist( $t_foldername ) === TRUE )
@@ -443,7 +445,7 @@ class ERP_mailbox_api
 
 										if ( !$this->pear_error( 'Select IMAP folder', $t_result ) )
 										{
-											$t_ListMsgs = $this->getListing();
+											$t_ListMsgs = $this->PEAR_getListing();
 
 											if ( !$this->pear_error( 'Retrieve list of messages', $t_ListMsgs ) )
 											{
@@ -451,7 +453,7 @@ class ERP_mailbox_api
 
 												while ( $t_Msg = array_pop( $t_ListMsgs ) )
 												{
-													$t_isDeleted = $this->isDeleted( $t_Msg[ 'msg_id' ], $t_flags );
+													$t_isDeleted = $this->PEAR_isDeleted( $t_Msg[ 'msg_id' ], $t_flags );
 
 													if ( $this->pear_error( 'Check email deleted flag', $t_isDeleted ) )
 													{
@@ -526,7 +528,7 @@ class ERP_mailbox_api
 
 	# --------------------
 	# Perform the login to the mailbox
-	private function mailbox_login()
+	private function PEAR_mailbox_login()
 	{
 		$t_mailbox_username = $this->_mailbox[ 'erp_username' ];
 		$t_mailbox_password = base64_decode( $this->_mailbox[ 'erp_password' ] );
@@ -538,7 +540,7 @@ class ERP_mailbox_api
 	# --------------------
 	# Return a list of emails in the mailbox
 	# Needed a workaround to sort IMAP emails in a certain order
-	private function getListing()
+	private function PEAR_getListing()
 	{
 		$t_ListMsgs = $this->_mailserver->getListing();
 
@@ -553,8 +555,9 @@ class ERP_mailbox_api
 				$t_ListMsgs = array_column( $t_ListMsgs, NULL, 'msg_id' );
 			}
 
-			krsort( $t_ListMsgs );
 		}
+
+		krsort( $t_ListMsgs );
 
 		return( $t_ListMsgs );
 	}
@@ -570,7 +573,7 @@ class ERP_mailbox_api
 
 		if ( empty( $t_msg ) )
 		{
-			$this->custom_error( 'Retrieved message was empty. Either an invalid message ID was passed or there is a problem with one of the required PEAR packages' );
+			$this->custom_error( 'Retrieved message was empty. Either an invalid message ID was passed or there is a problem with one of the required packages' );
 
 			return( FALSE );
 		}
@@ -646,7 +649,7 @@ class ERP_mailbox_api
 	# Check whether a email is deleted
 	# for IMAP only function
 	# Handles a workaround for problems with Net_IMAP 1.1.x with the hasFlag function (isDeleted uses that function)
-	private function isDeleted( $p_msg_id, &$p_flags )
+	private function PEAR_isDeleted( $p_msg_id, &$p_flags )
 	{
 //		return $this->hasFlag($message_nro, '\Deleted');
 		$flag = '\Deleted';
@@ -684,7 +687,7 @@ class ERP_mailbox_api
 		if ( $this->_mail_add_complete_email )
 		{
 			$t_part = array(
-				'name' => 'Complete email.txt',
+				'name' => 'Complete email.' . $this->_mail_add_complete_email_ext,
 				'ctype' => 'text/plain',
 				'body' => $p_msg,
 			);
@@ -694,15 +697,15 @@ class ERP_mailbox_api
 
 		$t_mp->parse();
 
-		$t_email[ 'From_parsed' ] = $this->parse_from_field( trim( $t_mp->from() ) );
+		$t_email[ 'From_parsed' ] = $this->parse_from_field( trim( (string)$t_mp->from() ) );
 		$t_email[ 'Reporter_id' ] = $this->get_user( $t_email[ 'From_parsed' ] );
 
-		$t_email[ 'Subject' ] = trim( $t_mp->subject() );
+		$t_email[ 'Subject' ] = trim( (string)$t_mp->subject() );
 
 		$t_email[ 'To' ] = $this->get_emailaddr_from_string( $t_mp->to() );
 		$t_email[ 'Cc' ] = $this->get_emailaddr_from_string( $t_mp->cc() );
 
-		$t_email[ 'X-Mantis-Body' ] = trim( $t_mp->body() );
+		$t_email[ 'X-Mantis-Body' ] = trim( (string)$t_mp->body() );
 
 		$t_email[ 'X-Mantis-Parts' ] = $t_mp->parts();
 
@@ -812,6 +815,9 @@ class ERP_mailbox_api
 			{
 				user_update_last_visit( $t_reporter_id );
 
+				// Reset cache for current users.
+				unset( $GLOBALS[ 'g_cache_config_user' ] );
+
 				return( (int) $t_reporter_id );
 			}
 		}
@@ -868,6 +874,7 @@ class ERP_mailbox_api
 			$t_bug_id = FALSE;
 		}
 
+		$t_bugnote_id = NULL;
 		if ( $t_bug_id !== FALSE && !bug_is_readonly( $t_bug_id ) )
 		{
 			$t_project_id = bug_get_field( $t_bug_id, 'project_id' );
@@ -889,11 +896,16 @@ class ERP_mailbox_api
 			$t_bug = bug_get( $t_bug_id, true );
 			if ( bug_is_resolved( $t_bug_id ) && ( !$this->_mail_respect_permissions || access_can_reopen_bug( $t_bug ) ) )
 			{
-				# Reopen issue and add a bug note
-				bug_reopen( $t_bug_id, $t_description );
+				if ( !is_blank( $t_description ) )
+				{
+					# Reopen issue and add a bug note
+					$t_bugnote_id = bugnote_add( $t_bug_id, $t_description, '0:00', config_get( 'default_bugnote_view_status' ) == VS_PRIVATE, BUGNOTE, '', null, false );
+					bugnote_process_mentions( $t_bug_id, $t_bugnote_id, $t_description );
+					bug_reopen( $t_bug_id );
 
-				$t_updated_bug = bug_get( $t_bug_id, true );
-				event_signal( 'EVENT_UPDATE_BUG', array( $t_bug, $t_updated_bug ) );
+					$t_updated_bug = bug_get( $t_bug_id, true );
+					event_signal( 'EVENT_UPDATE_BUG', array( $t_bug, $t_updated_bug ) );
+				}
 			}
 			elseif ( !is_blank( $t_description ) )
 			{
@@ -989,7 +1001,15 @@ class ERP_mailbox_api
 
 				$t_bug_data->steps_to_reproduce		= config_get( 'default_bug_steps_to_reproduce' );
 				$t_bug_data->additional_information	= config_get( 'default_bug_additional_info' );
-				$t_bug_data->due_date				= date_get_null();
+				
+				$t_fields = config_get( 'bug_report_page_fields' );
+				$t_fields = columns_filter_disabled( $t_fields );
+				$t_update_due_date = in_array( 'due_date', $t_fields ) && access_has_project_level( config_get( 'due_date_update_threshold' ), helper_get_current_project(), auth_get_current_user_id() );
+				$t_bug_data->due_date				= date_strtotime( config_get( 'due_date_default' ) );
+				if( ( $this->_mail_respect_permissions && !$t_update_due_date ) || $t_bug_data->due_date === '' )
+				{
+					$t_bug_data->due_date			= date_get_null();
+				}
 
 				$t_bug_data->project_id				= $t_project_id;
 
@@ -1116,7 +1136,7 @@ class ERP_mailbox_api
 
 					while ( $t_part = array_shift( $p_email[ 'X-Mantis-Parts' ] ) )
 					{
-						$t_file_rejected = $this->add_file( $t_bug_id, $t_part );
+						$t_file_rejected = $this->add_file( $t_bug_id, $t_part, $t_bugnote_id );
 
 						if ( $t_file_rejected !== TRUE )
 						{
@@ -1132,7 +1152,7 @@ class ERP_mailbox_api
 							'body' => 'List of rejected files' . "\n\n" . $t_rejected_files,
 						);
 
-						$t_reject_rejected_files = $this->add_file( $t_bug_id, $t_part );
+						$t_reject_rejected_files = $this->add_file( $t_bug_id, $t_part, $t_bugnote_id );
 
 						if ( $t_reject_rejected_files !== TRUE )
 						{
@@ -1163,10 +1183,10 @@ class ERP_mailbox_api
 	# --------------------
 	# Very dirty: Adds a file to a bug.
 	# returns true on success and the filename with reason on error
-	private function add_file( $p_bug_id, &$p_part )
+	private function add_file( $p_bug_id, &$p_part, $p_bugnote_id = NULL )
 	{
 		# Handle the file upload
-		$t_part_name = ( ( isset( $p_part[ 'name' ] ) ) ? trim( $p_part[ 'name' ] ) : NULL );
+		$t_part_name = ( ( isset( $p_part[ 'name' ] ) ) ? trim( (string)$p_part[ 'name' ] ) : NULL );
 		$t_strlen_body = strlen( $p_part[ 'body' ] );
 
 		if ( is_blank( $t_part_name ) )
@@ -1214,14 +1234,37 @@ class ERP_mailbox_api
 		{
 			$t_file_number = 0;
 			$t_opt_name = '';
-
-			while ( !file_is_name_unique( $t_opt_name . $t_part_name, $p_bug_id ) )
+			$t_dot_index = strripos( $t_part_name, '.' );
+			if( $t_dot_index === false )
 			{
-				$t_file_number++;
-				$t_opt_name = $t_file_number . '-';
+				$t_extension = '';
+				$t_file_name = $t_part_name;
+			}
+			else
+			{
+				$t_extension = substr( $t_part_name, $t_dot_index, strlen( $t_part_name ) - $t_dot_index );
+				$t_file_name = substr( $t_part_name, 0, $t_dot_index );
 			}
 
-			mci_file_add( $p_bug_id, $t_opt_name . $t_part_name, $p_part[ 'body' ], $p_part[ 'ctype' ], 'bug' );
+			// check max length filename. Shorten if necessary. Leave room for file number.
+			$t_max_length = ( ( defined( 'DB_FIELD_SIZE_FILENAME' ) ) ? DB_FIELD_SIZE_FILENAME : 250 ) - 5;
+			if ( strlen( $t_file_name ) > ( $t_max_length - strlen( $t_extension ) ) )
+			{
+				$t_file_name = substr( $t_file_name, 0, ( $t_max_length - strlen( $t_extension ) ) );
+			}
+
+			while ( !file_is_name_unique( $t_file_name . $t_opt_name . $t_extension, $p_bug_id ) )
+			{
+				$t_file_number++;
+				$t_opt_name = '-' . $t_file_number;
+			}
+
+			$t_attachment_id = mci_file_add( $p_bug_id, $t_file_name . $t_opt_name . $t_extension, $p_part[ 'body' ], $p_part[ 'ctype' ], 'bug' );
+
+			if ( function_exists( 'file_link_to_bugnote' ) && is_numeric( $t_attachment_id ) && $t_attachment_id > 0 && $p_bugnote_id !== NULL )
+			{
+				file_link_to_bugnote( $t_attachment_id, $p_bugnote_id );
+			}
 		}
 
 		return( TRUE );
@@ -1241,7 +1284,7 @@ class ERP_mailbox_api
 		$t_project_name = preg_replace( "/&(.)(acute|cedil|circ|ring|tilde|uml);/", "$1", $t_project_name );
 		$t_project_name = preg_replace( "/([^A-Za-z0-9 ]+)/", "-", html_entity_decode( $t_project_name ) );
 		$t_project_name = preg_replace( "/(\.+)/", ".", $t_project_name );
-		$t_project_name = trim( $t_project_name, "-. " );
+		$t_project_name = trim( (string)$t_project_name, "-. " );
 
 		return( $t_project_name );
 	}
@@ -1301,11 +1344,11 @@ class ERP_mailbox_api
 	# Return the emailaddress from the mail's 'From' field
 	private function parse_from_field( $p_from_address )
 	{
-		if ( preg_match( '/^(?:(?P<name>.*)<|)(?P<email>' . $this->_email_regex_simple . ')(?:>|)$/u', trim( $p_from_address ), $match ) )
+		if ( preg_match( '/^(?:(?P<name>.*?)<|)(?P<email>' . $this->_email_regex_simple . ')(?:>|)/u', trim( (string)$p_from_address ), $match ) )
 		{
 			$v_from_address = array(
-				'name'	=> trim( $match[ 'name' ], '"\' ' ),
-				'email'	=> trim( $match[ 'email' ] ),
+				'name'	=> trim( (string)$match[ 'name' ], '"\' ' ),
+				'email'	=> trim( (string)$match[ 'email' ] ),
 				'From'	=> $p_from_address,
 			);
 		}
@@ -1328,11 +1371,11 @@ class ERP_mailbox_api
 	{
 		$v_addresses = array();
 
-		if ( preg_match_all( '/' . $this->_email_regex_simple . '/u', $p_addresses, $matches, PREG_SET_ORDER ) )
+		if ( preg_match_all( '/' . $this->_email_regex_simple . '/u', (string)$p_addresses, $matches, PREG_SET_ORDER ) )
 		{
 			foreach( $matches AS $match )
 			{
-				$v_addresses[] = trim( $match[ 0 ] );
+				$v_addresses[] = trim( (string)$match[ 0 ] );
 			}
 		}
 
@@ -1525,7 +1568,7 @@ class ERP_mailbox_api
 			foreach( $p_references AS $t_reference ) 
 			{
 				$query = 'SELECT issue_id FROM ' . plugin_table( 'msgids' ) . ' WHERE msg_id=' . db_param();
-				$t_bug_id = db_result( db_query_bound( $query, array( $t_reference ), 1 ) );
+				$t_bug_id = db_result( db_query( $query, array( $t_reference ), 1 ) );
 
 				if( $t_bug_id !== FALSE ) 
 				{
@@ -1544,7 +1587,7 @@ class ERP_mailbox_api
 		$t_ref_ids = array();
 
 		$query = 'SELECT msg_id FROM ' . plugin_table( 'msgids' ) . ' WHERE issue_id=' . db_param();
-		$t_result = db_query_bound( $query, array( (int)$p_bug_id ) );
+		$t_result = db_query( $query, array( (int)$p_bug_id ) );
 
 		while( $t_row = db_fetch_array( $t_result ) )
 		{
@@ -1584,7 +1627,7 @@ class ERP_mailbox_api
 							// Add the Message-ID to the table for future reference
 							$t_query = 'INSERT INTO ' . plugin_table( 'msgids' ) . '( issue_id, msg_id ) VALUES'
 									. ' (' . db_param() . ', ' . db_param() . ')';
-							db_query_bound( $t_query, array( (int)$p_bug_id, $t_ref ) );
+							db_query( $t_query, array( (int)$p_bug_id, $t_ref ) );
 						}
 					}
 				}
@@ -1598,7 +1641,7 @@ class ERP_mailbox_api
 	public static function delete_references_for_bug_id( $p_bug_id )
 	{
 		$t_query = 'DELETE FROM ' . plugin_table( 'msgids' ) . ' WHERE issue_id = ' . db_param();
-		db_query_bound( $t_query, array( (int)$p_bug_id ) );
+		db_query( $t_query, array( (int)$p_bug_id ) );
 	}
 
 	# --------------------
@@ -1608,7 +1651,7 @@ class ERP_mailbox_api
 	{
 		$t_query = 'DELETE FROM ' . plugin_table( 'msgids' ) . ' WHERE NOT EXISTS'
 				. '( SELECT 1 FROM ' . db_get_table( 'bug' ) . ' B WHERE B.id = issue_id )';
-		db_query_bound( $t_query );
+		db_query( $t_query );
 	}
 
 	# --------------------
@@ -1691,7 +1734,7 @@ class ERP_mailbox_api
 
 			$selectedFragments = array_filter( $bodyfragments, array( $this, 'selectFragments' ) );
 
-			$t_description = rtrim( implode( "\n", $selectedFragments ) );
+			$t_description = rtrim( (string)implode( "\n", $selectedFragments ) );
 		}
 
 		return( $t_description );

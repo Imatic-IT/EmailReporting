@@ -50,6 +50,9 @@ class EmailReportingPlugin extends MantisPlugin
 			# Add complete email into the attachments
 			'mail_add_complete_email'		=> OFF,
 
+			# Extension used for the complete email attachment
+			'mail_add_complete_email_ext'	=> 'txt',
+
 			// Add users from Cc and To field in mail header
 			'mail_add_users_from_cc_to'		=> OFF,
 
@@ -294,7 +297,7 @@ class EmailReportingPlugin extends MantisPlugin
 			array( 'CreateTableSQL', array( plugin_table( 'msgids' ), "
 				id              I       UNSIGNED NOTNULL PRIMARY AUTOINCREMENT,
 				issue_id        I       UNSIGNED NOTNULL,
-				msg_id          C(255)  NOTNULL
+				msg_id          C(250)  NOTNULL
 				", Array('mysql' => 'DEFAULT CHARSET=utf8', 'pgsql' => 'WITHOUT OIDS')
 				)
 			),
@@ -321,6 +324,10 @@ class EmailReportingPlugin extends MantisPlugin
 	 */
 	function ERP_manage_emailreporting_menu( )
 	{
+		if( !access_has_project_level( config_get( 'manage_plugin_threshold' ) ) ) {
+			return array();
+		}
+
 		return array( '<a href="' . plugin_page( 'manage_mailbox' ) . '">' . plugin_lang_get( 'manage' ) . ' ' . plugin_lang_get( 'plugin_title' ) . '</a>', );
 	}
 
@@ -630,6 +637,16 @@ class EmailReportingPlugin extends MantisPlugin
 			plugin_config_delete( 'mail_strip_gmail_style_replies' );
 
 			plugin_config_set( 'config_version', 17 );
+		}
+
+		if ( $t_config_version <= 17 )
+		{
+			$t_query = 'DELETE FROM ' . plugin_table( 'msgids' ) . ' WHERE msg_id NOT LIKE ' . db_param();
+			db_query( $t_query, array( '<%>' ) );
+			$t_query = 'DELETE FROM ' . plugin_table( 'msgids' ) . ' WHERE msg_id LIKE ' . db_param();
+			db_query( $t_query, array( '<% %>' ) );
+
+			plugin_config_set( 'config_version', 18 );
 		}
 	}
 
