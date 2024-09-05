@@ -1259,6 +1259,15 @@ class ERP_mailbox_api
 				$t_opt_name = '-' . $t_file_number;
 			}
 
+			$t_file_size = strlen( $p_part[ 'body' ] );
+
+			$duplicity =   imatic_file_is_name_and_size_unique( $t_file_name . $t_extension, $p_bug_id, $t_file_size );
+
+			if ( $duplicity === FALSE )
+			{
+				return( TRUE );
+			}
+
 			$t_attachment_id = mci_file_add( $p_bug_id, $t_file_name . $t_opt_name . $t_extension, $p_part[ 'body' ], $p_part[ 'ctype' ], 'bug' );
 
 			if ( function_exists( 'file_link_to_bugnote' ) && is_numeric( $t_attachment_id ) && $t_attachment_id > 0 && $p_bugnote_id !== NULL )
