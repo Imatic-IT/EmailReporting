@@ -62,6 +62,7 @@ class ERP_mailbox_api
 	private $_mail_bug_priority;
 	private $_mail_debug;
 	private $_mail_debug_directory;
+	private $_mail_log_directory;
 	private $_mail_debug_show_memory_usage;
 	private $_mail_delete;
 	private $_mail_disposable_email_checker;
@@ -98,6 +99,7 @@ class ERP_mailbox_api
 
 	private $_max_file_size;
 	private $_memory_limit;
+	private $_current_folder = '';
 
 	# --------------------
 	# Retrieve all necessary configuration options
@@ -116,6 +118,7 @@ class ERP_mailbox_api
 		$this->_mail_bug_priority				= plugin_config_get( 'mail_bug_priority' );
 		$this->_mail_debug						= plugin_config_get( 'mail_debug' );
 		$this->_mail_debug_directory			= plugin_config_get( 'mail_debug_directory' );
+		$this->_mail_log_directory				= plugin_config_get( 'mail_log_directory' );
 		$this->_mail_debug_show_memory_usage	= plugin_config_get( 'mail_debug_show_memory_usage' );
 		$this->_mail_delete						= plugin_config_get( 'mail_delete' );
 		$this->_mail_disposable_email_checker	= plugin_config_get( 'mail_disposable_email_checker' );
@@ -326,6 +329,32 @@ class ERP_mailbox_api
 		if ( !$this->_test_only )
 		{
 			echo 'Mailbox: ' . $this->_mailbox[ 'description' ] . "\n" . $t_error_text . "\n\n";
+		}
+	}
+
+	# --------------------
+	# Write an email processing log entry to error_log and optionally to a log file in the debug directory
+	private function log_email_processing( $p_message_id, $p_action, $p_details = '' )
+	{
+		$t_folder  = !empty( $this->_current_folder ) ? $this->_current_folder : 'N/A (POP3)';
+		$t_line    = date( 'Y-m-d H:i:s' ) . ' UTC'
+			. ' | Mailbox: '    . $this->_mailbox[ 'description' ]
+			. ' | Folder: '     . $t_folder
+			. ' | MsgID: '      . ( !empty( $p_message_id ) ? $p_message_id : '<unknown>' )
+			. ' | '             . $p_action
+			. ( !empty( $p_details ) ? ' | ' . $p_details : '' );
+
+		$t_log_dir  = config_get_global( 'erp_log_directory', $this->_mail_log_directory ?: sys_get_temp_dir() );
+		$t_log_file = $t_log_dir . '/email_reporting.log';
+
+		if ( !is_dir( $t_log_dir ) )
+		{
+			mkdir( $t_log_dir, 0755, true );
+		}
+
+		if ( is_dir( $t_log_dir ) && is_writeable( $t_log_dir ) )
+		{
+			file_put_contents( $t_log_file, $t_line . "\n", FILE_APPEND | LOCK_EX );
 		}
 	}
 
@@ -605,6 +634,7 @@ class ERP_mailbox_api
 				if ( $this->_mail_ignore_auto_replies && $t_email[ 'Is-Auto-Reply' ] )
 				{
 					$this->custom_error( 'Email is marked as an auto-reply and has been ignored.' );
+					$this->log_email_processing( $t_email[ 'Message-ID' ], 'IGNORED', 'Auto-reply' );
 				}
 				else
 				{
@@ -614,7 +644,12 @@ class ERP_mailbox_api
 			else
 			{
 				$this->custom_error( 'From email address rejected by email_is_valid function based on: ' . $t_email[ 'From_parsed' ][ 'From' ] );
+				$this->log_email_processing( $t_email[ 'Message-ID' ], 'ERROR', 'Invalid from address: ' . $t_email[ 'From_parsed' ][ 'From' ] );
 			}
+		}
+		else
+		{
+			$this->log_email_processing( $t_email[ 'Message-ID' ], 'ERROR', 'Could not get valid reporter for: ' . $t_email[ 'From_parsed' ][ 'From' ] );
 		}
 
 		$this->show_memory_usage( 'Finished process single email' );
@@ -944,6 +979,7 @@ class ERP_mailbox_api
 				{
 					// Access denied for adding new notes / reopen issue
 					$this->custom_error( 'Access denied for adding notes. Email ignored.' . "\n" );
+					$this->log_email_processing( $p_email[ 'Message-ID' ], 'IGNORED', 'Access denied for adding notes' );
 					return;
 				}
 			}
@@ -1108,6 +1144,7 @@ class ERP_mailbox_api
 			{
 				// Access denied for adding new issues
 				$this->custom_error( 'Access denied for adding new issues. Email ignored.' . "\n" );
+				$this->log_email_processing( $p_email[ 'Message-ID' ], 'IGNORED', 'Access denied for adding new issues' );
 				return;
 			}
 		}
@@ -1115,10 +1152,12 @@ class ERP_mailbox_api
 		{
 			// Not allowed to add issues and not allowed / able to add notes. Need to stop processing
 			$this->custom_error( 'Not allowed to create a new issue. Email ignored.' );
+			$this->log_email_processing( $p_email[ 'Message-ID' ], 'IGNORED', 'Not allowed to create new issue' );
 			return;
 		}
 
-		$this->custom_error( 'Reporter: ' . $p_email[ 'Reporter_id' ] . ' - ' . $p_email[ 'From_parsed' ][ 'email' ] . ' --> Issue ID: #' . $t_bug_id, FALSE );
+		$this->custom_error( 'Reporter: ' . $p_email[ 'Reporter_id' ] . ' - ' . $p_email[ 'From_parsed' ][ 'email' ] . ' --> Issue ID: #' . $t_bug_id . ' | Message-ID: ' . $p_email[ 'Message-ID' ], FALSE );
+		$this->log_email_processing( $p_email[ 'Message-ID' ], isset( $t_bugnote_id ) ? 'BUGNOTE_ADDED' : 'ISSUE_CREATED', 'Issue #' . $t_bug_id );
 
 		$this->show_memory_usage( 'Finished add bug' );
 

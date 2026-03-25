@@ -94,6 +94,10 @@ class EmailReportingPlugin extends MantisPlugin
 			# Save mail contents to this directory if debug mode is ON
 			'mail_debug_directory'			=> '/tmp/mantis',
 
+			# Directory for email_reporting.log (processing log, always on)
+			# Leave empty to use sys_get_temp_dir()
+			'mail_log_directory'			=> '',
+
 			# Used for debugging the system.
 			# Shows the memory usage in different stages of the debugging process
 			'mail_debug_show_memory_usage'	=> OFF,
