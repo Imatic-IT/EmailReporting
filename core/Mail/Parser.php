@@ -40,6 +40,7 @@ class ERP_Mail_Parser
 	private $_is_auto_reply = FALSE;
 
 	private $_mb_list_encodings = array();
+	private $_mb_native_encodings = array();
 
 	private $_headers = array();
 
@@ -63,7 +64,29 @@ class ERP_Mail_Parser
 			'us-ascii' => 'ASCII',
 			'big5' => 'BIG-5',
 			'windows-1257' => 'ISO-8859-13', // not perfect but should do the job
-			'windows-1250' => 'ISO-8859-2',
+			'windows-1250' => 'ISO-8859-2', // not perfect either, only used when iconv is unavailable
+	);
+
+	/**
+	* Charsets that mbstring either cannot decode at all or decodes incorrectly,
+	* but iconv handles properly. They take priority over the ISO-8859-* fallbacks
+	* above, which are only approximations.
+	*
+	* mbstring gained native Windows-125x support in PHP 8.3; on older builds the
+	* closest ISO-8859-* page was substituted instead. For Windows-1250 the two
+	* pages disagree on 42 bytes: 0x80-0x9F (s/z/t-caron, curly quotes, dashes)
+	* decode to invisible C1 control characters -- the "missing letters" symptom --
+	* and a further 15 bytes silently decode to the wrong letter (L-caron, A-ogonek).
+	*
+	* The keys in this array should be lowercase.
+	*
+	* @access private
+	*/
+	private $_iconv_charsets = array(
+			'windows-1250' => 'WINDOWS-1250',
+			'windows-1253' => 'WINDOWS-1253',
+			'windows-1254' => 'WINDOWS-1254',
+			'windows-1257' => 'WINDOWS-1257',
 	);
 
 	public function __construct( $options, $mailbox_starttime = NULL )
@@ -114,8 +137,45 @@ class ERP_Mail_Parser
 				$r_charset_list[ strtolower( $t_value ) ] = $t_value;
 			}
 
+			$this->_mb_native_encodings = $r_charset_list;
 			$this->_mb_list_encodings = $r_charset_list + $this->_mbstring_unsupportedcharsets;
 		}
+	}
+
+	/**
+	* Returns the iconv name of a charset that must not be decoded through mbstring
+	* on this PHP build, or NULL when mbstring handles it natively (PHP >= 8.3) or
+	* iconv is unavailable -- in which case the caller keeps its existing behaviour.
+	*/
+	private function iconv_charset( $charset )
+	{
+		$t_charset = strtolower( (string) $charset );
+
+		if ( !isset( $this->_iconv_charsets[ $t_charset ] )
+		  || isset( $this->_mb_native_encodings[ $t_charset ] )
+		  || !function_exists( 'iconv' ) )
+		{
+			return( NULL );
+		}
+
+		return( $this->_iconv_charsets[ $t_charset ] );
+	}
+
+	/**
+	* iconv() to the internal encoding, dropping bytes that are invalid in the
+	* source charset. Returns FALSE when the conversion fails altogether.
+	*/
+	private function iconv_to_internal( $string, $iconv_charset )
+	{
+		$t_string = @iconv( $iconv_charset, $this->_encoding . '//IGNORE', $string );
+
+		if ( $t_string === FALSE )
+		{
+			// Some builds refuse //IGNORE outright rather than skipping bad bytes
+			$t_string = @iconv( $iconv_charset, $this->_encoding, $string );
+		}
+
+		return( $t_string );
 	}
 
 	public function setInputString( &$content )
@@ -134,6 +194,19 @@ class ERP_Mail_Parser
 	{
 		if ( extension_loaded( 'mbstring' ) )
 		{
+			$t_iconv_charset = $this->iconv_charset( $charset );
+			if ( $t_iconv_charset !== NULL )
+			{
+				$t_encode = $this->iconv_to_internal( $encode, $t_iconv_charset );
+
+				if ( $t_encode !== FALSE )
+				{
+					$encode = $t_encode;
+					// Already in the internal encoding -- skip the mbstring conversion below
+					$charset = $this->_encoding;
+				}
+			}
+
 			if ( $charset === NULL || $charset === 'auto' || !isset( $this->_mb_list_encodings[ strtolower( $charset ) ] ) )
 			{
 				$charset = mb_detect_encoding( $encode, $this->_def_charset );
@@ -179,6 +252,28 @@ class ERP_Mail_Parser
 				$charset  = $matches[2];
 				$encoding = $matches[3];
 				$text     = $matches[4];
+
+				// Charsets mbstring would mangle are decoded by iconv instead
+				$t_iconv_charset = $this->iconv_charset( $charset );
+				if ( $t_iconv_charset !== NULL )
+				{
+					if ( strtolower( $encoding ) === 'q' )
+					{
+						$t_raw = quoted_printable_decode( str_replace( '_', ' ', $text ) );
+					}
+					else
+					{
+						$t_raw = base64_decode( $text );
+					}
+
+					$t_raw = $this->iconv_to_internal( $t_raw, $t_iconv_charset );
+
+					if ( $t_raw !== FALSE )
+					{
+						$t_encode = str_replace( $encoded, $t_raw, $t_encode );
+						continue;
+					}
+				}
 
 				// Process unsupported fallback charsets
 				if ( isset( $this->_mb_list_encodings[ strtolower( $charset ) ] ) && isset( $this->_mbstring_unsupportedcharsets[ strtolower( $charset ) ] ) && $this->_mb_list_encodings[ strtolower( $charset ) ] === $this->_mbstring_unsupportedcharsets[ strtolower( $charset ) ] )
