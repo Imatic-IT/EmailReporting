@@ -1030,7 +1030,11 @@ if ( !function_exists( 'check_is_collation_utf8' ) )
 		// Need to disable inherit projects for one moment.
 		ERP_set_temporary_overwrite( 'subprojects_inherit_categories', OFF );
 
-		$t_sel_value = (array) $p_sel_value;
+		// A mailbox carries a single category, and print_category_option_list()
+		// expects a scalar id: an array compares as != 0, which sends an unset
+		// value down the orphaned-category branch and fails with
+		// ERROR_CATEGORY_NOT_FOUND on a mailbox that has no category yet.
+		$t_sel_value = (int) $p_sel_value;
 
 		print_category_option_list( $t_sel_value, ALL_PROJECTS );
 

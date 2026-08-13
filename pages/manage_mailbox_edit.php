@@ -37,7 +37,11 @@ if ( $f_mailbox_action === 'add' || $f_mailbox_action === 'copy' || ( ( $f_mailb
 		$t_mailbox += $t_mailbox_imap;
 	}
 
-	$t_plugin_content = gpc_get_string_array( 'plugin_content', NULL );
+	// MantisBT 2.28 types the default as array, so NULL as a "field was not
+	// submitted" marker is a TypeError. Ask whether it was submitted instead;
+	// the is_array() check below keeps the original semantics of omitting the
+	// key entirely when no plugin contributed any fields.
+	$t_plugin_content = ( gpc_isset( 'plugin_content' ) ? gpc_get_string_array( 'plugin_content', array() ) : NULL );
 
 	if ( is_array( $t_plugin_content ) )
 	{
