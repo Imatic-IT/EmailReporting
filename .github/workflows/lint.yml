@@ -1,0 +1,25 @@
+name: lint
+
+on: [push, pull_request]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # This plugin has no unit tests — it needs a live mail server — so a
+    # syntax check on the PHP version production runs is the useful gate.
+    name: Lint on PHP 7.4
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+
+      - name: Lint every PHP file
+        run: |
+          find . -name '*.php' -print0 | xargs -0 -r -n1 php -l
