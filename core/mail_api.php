@@ -444,6 +444,13 @@ class ERP_mailbox_api
 						{
 							$t_projects = project_get_all_rows();
 							$t_hierarchydelimiter = $this->_mailserver->getHierarchyDelimiter();
+
+							// Emails left in the basefolder root were never sorted into a project
+							// folder, so the folder structure says nothing about the target project.
+							// Process them without an override so EVENT_ERP_PROJECT_DETERMINE can
+							// route them (e.g. by recipient address); add_bug() still falls back to
+							// the mailbox default project when nothing routes.
+							$this->process_imap_folder( str_replace( '/', $t_hierarchydelimiter, $this->_mailbox[ 'imap_basefolder' ] ), FALSE );
 						}
 						else
 						{
@@ -461,55 +468,10 @@ class ERP_mailbox_api
 								// We don't need to check twice whether the mailbox exist incase createfolderstructure is false
 								if ( !$this->_mailbox[ 'imap_createfolderstructure' ] || $this->_mailserver->mailboxExist( $t_foldername ) === TRUE )
 								{
-									// Exchange does not seem to like numMsg so that was changed to getListing
-									// getListing returns an error when there are no emails in an IMAP folder.
-									// After 10 errors Exchange will ignore the connection and any further commands will fail with ", "
-									// 10 errors or more can happen when imap_createfolderstructure is ON
-									// examineMailbox allows EmailReporting to check whether or not there are emails in the folder without producing an error
-									$t_result = $this->_mailserver->examineMailbox( $t_foldername );
-
-									if ( !$this->pear_error( 'Examine IMAP folder', $t_result ) && $t_result[ 'EXISTS' ] > 0 )
-									{
-										$t_result = $this->_mailserver->selectMailbox( $t_foldername );
-
-										if ( !$this->pear_error( 'Select IMAP folder', $t_result ) )
-										{
-											$t_ListMsgs = $this->PEAR_getListing();
-
-											if ( !$this->pear_error( 'Retrieve list of messages', $t_ListMsgs ) )
-											{
-												$t_flags = $this->_mailserver->getFlags();
-
-												while ( $t_Msg = array_pop( $t_ListMsgs ) )
-												{
-													$t_isDeleted = $this->PEAR_isDeleted( $t_Msg[ 'msg_id' ], $t_flags );
-
-													if ( $this->pear_error( 'Check email deleted flag', $t_isDeleted ) )
-													{
-														// Should we stop processing if the flag cannot be verified or process the email?
-														// Let's ignore the email and hope the check works on the next run
-														$t_isDeleted = TRUE;
-													}
-
-													if ( $t_isDeleted === TRUE )
-													{
-														// Email marked as deleted. Do nothing
-													}
-													else
-													{
-														$t_emailresult = $this->process_single_email( $t_Msg[ 'msg_id' ], (int) $t_project[ 'id' ] );
-
-														if ( $t_emailresult === TRUE )
-														{
-															$t_deleteresult = $this->_mailserver->deleteMsg( $t_Msg[ 'msg_id' ] );
-
-															$this->pear_error( 'Attempt delete email', $t_deleteresult );
-														}
-													}
-												}
-											}
-										}
-									}
+									// Without a folder structure every email lands in the basefolder, so
+									// there is no folder-derived project here either. FALSE lets the routing
+									// event decide and still defaults to the mailbox project.
+									$this->process_imap_folder( $t_foldername, ( ( $this->_mailbox[ 'imap_createfolderstructure' ] == ON ) ? (int) $t_project[ 'id' ] : FALSE ) );
 								}
 								elseif ( $this->_mailbox[ 'imap_createfolderstructure' ] == ON )
 								{
@@ -540,6 +502,65 @@ class ERP_mailbox_api
 		else
 		{
 			$this->custom_error( 'Failed to connect to the mail server' . ( ( $this->_mailbox[ 'encryption' ] !== 'None' && $this->_mailbox[ 'ssl_cert_verify' ] == ON ) ? '. This could possibly be because SSL certificate verification failed' : NULL ) );
+		}
+	}
+
+	# Process every email in a single IMAP folder
+	# $p_overwrite_project_id is the project the folder maps to, or FALSE when the
+	# folder does not identify one (basefolder root / no folder structure)
+	private function process_imap_folder( $p_foldername, $p_overwrite_project_id = FALSE )
+	{
+		// Exchange does not seem to like numMsg so that was changed to getListing
+		// getListing returns an error when there are no emails in an IMAP folder.
+		// After 10 errors Exchange will ignore the connection and any further commands will fail with ", "
+		// 10 errors or more can happen when imap_createfolderstructure is ON
+		// examineMailbox allows EmailReporting to check whether or not there are emails in the folder without producing an error
+		$t_result = $this->_mailserver->examineMailbox( $p_foldername );
+
+		if ( !$this->pear_error( 'Examine IMAP folder', $t_result ) && $t_result[ 'EXISTS' ] > 0 )
+		{
+			$t_result = $this->_mailserver->selectMailbox( $p_foldername );
+
+			if ( !$this->pear_error( 'Select IMAP folder', $t_result ) )
+			{
+				$t_ListMsgs = $this->PEAR_getListing();
+
+				if ( !$this->pear_error( 'Retrieve list of messages', $t_ListMsgs ) )
+				{
+					$t_flags = $this->_mailserver->getFlags();
+
+					while ( $t_Msg = array_pop( $t_ListMsgs ) )
+					{
+						$t_isDeleted = $this->PEAR_isDeleted( $t_Msg[ 'msg_id' ], $t_flags );
+
+						if ( $this->pear_error( 'Check email deleted flag', $t_isDeleted ) )
+						{
+							// Should we stop processing if the flag cannot be verified or process the email?
+							// Let's ignore the email and hope the check works on the next run
+							$t_isDeleted = TRUE;
+						}
+
+						if ( $t_isDeleted === TRUE )
+						{
+							// Email marked as deleted. Do nothing
+						}
+						else
+						{
+							$t_emailresult = $this->process_single_email( $t_Msg[ 'msg_id' ], $p_overwrite_project_id );
+
+							// Honour mail_delete the way the POP3 branch does. Flagging the
+							// message \Deleted regardless left it hidden from every later run
+							// even with the setting off, since only the expunge was skipped.
+							if ( $this->_mail_delete && $t_emailresult === TRUE )
+							{
+								$t_deleteresult = $this->_mailserver->deleteMsg( $t_Msg[ 'msg_id' ] );
+
+								$this->pear_error( 'Attempt delete email', $t_deleteresult );
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -638,6 +659,11 @@ class ERP_mailbox_api
 				}
 				else
 				{
+					// Allow plugins to determine target project from email content (e.g. recipient address routing).
+					// The chained value is the current override (FALSE when the folder structure did not
+					// determine a project); plugins are expected to leave a non-FALSE value untouched.
+					$p_overwrite_project_id = event_signal( 'EVENT_ERP_PROJECT_DETERMINE', $p_overwrite_project_id, array( $t_email, $this->_mailbox ) );
+
 					$this->add_bug( $t_email, $p_overwrite_project_id );
 				}
 			}

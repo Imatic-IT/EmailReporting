@@ -288,6 +288,13 @@ class EmailReportingPlugin extends MantisPlugin
 			'EVENT_ERP_PARSER_OPTIONS' => EVENT_TYPE_CHAIN,
 
 			'EVENT_ERP_DESCRIPTION' => EVENT_TYPE_CHAIN,
+
+			// Fired after email parsing, before bug creation.
+			// Allows plugins to determine the target project based on email content.
+			// Chain value: current project_id override (int or FALSE).
+			// Additional params: $p_email (parsed email array), $p_mailbox (mailbox config array).
+			// Return the (possibly modified) project_id override.
+			'EVENT_ERP_PROJECT_DETERMINE' => EVENT_TYPE_CHAIN,
 		);
 	}
 
