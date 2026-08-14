@@ -52,6 +52,11 @@ on its own without it.
 > Deploying this to an existing mailbox processes the **whole backlog sitting in
 > the basefolder root** on the first run. Empty or archive it first.
 
+ImaticEmailReporting's README carries the deployment checklist for the whole
+feature — the settings on this side (`mail_delete`, `imap_basefolder`,
+`imap_createfolderstructure`, running the fetch from cron) are listed there
+together with the routing configuration.
+
 ## Merging upstream
 
 ```bash
