@@ -1806,9 +1806,12 @@ class ERP_mailbox_api
 			$bodyParsed = $EmailBodyParser->parse( $t_description );
 			$bodyfragments = $bodyParsed->getFragments();
 
-			$selectedFragments = array_filter( $bodyfragments, array( $this, 'selectFragments' ) );
+			$selectedFragments = $this->selectFragments( $bodyfragments );
 
-			$t_description = rtrim( (string)implode( "\n", $selectedFragments ) );
+			// Fragments are joined with a blank line: without it markdown treats the
+			// line following a "> " quote as part of that quote (lazy continuation)
+			// and the authors own reply gets rendered inside the quote block
+			$t_description = rtrim( (string)implode( "\n\n", $selectedFragments ) );
 		}
 
 		return( $t_description );
@@ -1816,9 +1819,45 @@ class ERP_mailbox_api
 
 	# --------------------
 	# Select the fragments of interest to us
-	private function selectFragments( EmailReplyParser\Fragment $fragment )
+	#
+	# Quoted fragments are only dropped when they belong to the trailing reply
+	# block. Quotes in between the authors own text (inline replies) are kept,
+	# otherwise the note loses its context
+	private function selectFragments( array $p_fragments )
 	{
-		return( !( $fragment->isEmpty() ) && !( $this->_mail_remove_replies && $fragment->isQuoted() ) && !( $this->_mail_strip_signature && $fragment->isSignature() ) );
+		$t_last_own_content = -1;
+
+		foreach ( $p_fragments as $t_index => $t_fragment )
+		{
+			if ( !$t_fragment->isEmpty() && !$t_fragment->isQuoted() && !$t_fragment->isSignature() )
+			{
+				$t_last_own_content = $t_index;
+			}
+		}
+
+		$t_selected = array();
+
+		foreach ( $p_fragments as $t_index => $t_fragment )
+		{
+			if ( $t_fragment->isEmpty() )
+			{
+				continue;
+			}
+
+			if ( $this->_mail_strip_signature && $t_fragment->isSignature() )
+			{
+				continue;
+			}
+
+			if ( $this->_mail_remove_replies && $t_fragment->isQuoted() && $t_index > $t_last_own_content )
+			{
+				continue;
+			}
+
+			$t_selected[] = $t_fragment;
+		}
+
+		return( $t_selected );
 	}
 
 	# --------------------
