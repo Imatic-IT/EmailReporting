@@ -1,0 +1,19 @@
+Return-Path: <matej.brodziansky@imatic.cz>
+From: Matej Brodziansky <matej.brodziansky@imatic.cz>
+To: mantis@imatic.cz
+Subject: [Test Project 0001234]: reagujem v texte
+Date: Tue, 1 Sep 2026 09:25:00 +0200
+Message-ID: <-test-project-0001234---reagujem-v-texte@imatic.cz>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Reagujem priamo v texte:
+
+> Kedy bude hotový deploy?
+V piatok popoludní.
+
+> A čo migrácie DB?
+Tie už bežia na stagingu.
+
+Ďakujem

@@ -1,0 +1,24 @@
+Return-Path: <matej.brodziansky@imatic.cz>
+From: Matej Brodziansky <matej.brodziansky@imatic.cz>
+To: mantis@imatic.cz
+Subject: [Test Project 0001234]: multipart odpoved
+Date: Tue, 1 Sep 2026 09:25:00 +0200
+Message-ID: <multipart-alt@imatic.cz>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="BOUNDARY42"
+
+--BOUNDARY42
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Reagujem priamo v texte:
+
+> Kedy bude deploy?
+V piatok.
+
+--BOUNDARY42
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><body><p>Reagujem priamo v texte:</p><blockquote>Kedy bude deploy?</blockquote><p>V piatok.</p></body></html>
+--BOUNDARY42--

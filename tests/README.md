@@ -1,79 +1,125 @@
-# EmailReporting — testy parsovania tela mailu
+# EmailReporting — automatické testy
 
-Testy pre orezávanie citovaných častí (`>`) v odpovediach, ktoré EmailReporting
-zakladá ako poznámky.
+Tri vrstvy testov nad spracovaním prichádzajúcich mailov. Všetky bežia v CI
+(vlastný krok v `.github/workflows/cd.yml`, ktorý púšťa `phpunit.xml` tohto
+pluginu) a červený výsledok blokuje deploy na stage.
 
-## Kontext
+| vrstva | čo testuje | čo potrebuje | rýchlosť |
+|---|---|---|---|
+| `tests/unit` | parsovanie tela, citácie, podpisy, kódovania, MIME | nič | ms |
+| `tests/integration` | celá cesta mail → poznámka v DB | nainštalovaný Mantis + DB | ~0,2 s |
+| `tests/mailserver` | fetch cez IMAP tak ako cron | Mantis + DB + GreenMail | ~9 s |
+
+## Kontext — čo sa tu chráni
 
 Keď je zapnuté **Remove all replies from notes** (`mail_remove_replies`) alebo
 **Strip signature from email body** (`mail_strip_signature`), telo mailu prejde cez
-`EmailReplyParser` v `ERP_mailbox_api::parse_email_body()`.
+`EmailReplyParser` v `erp_parse_email_body()` (`core/mail_body_pure.php`).
 
 Pôvodná implementácia zahadzovala **každý** citovaný fragment. Ak človek odpovedal
 inline — vlastný text preložený citátmi z pôvodnej správy — citáty zmizli a poznámka
-stratila zmysel. `selectFragments()` teraz zahodí len **koncový** citovaný blok;
-citácie obklopené vlastným textom ostávajú.
+stratila zmysel (bug nahlásil jan.pekar, poznámka ~0519949). `erp_select_fragments()`
+teraz zahodí len **koncový** citovaný blok; citácie obklopené vlastným textom ostávajú.
+
+Fragmenty sa spájajú prázdnym riadkom. Bez neho markdown pripojí riadok za `> `
+citáciou do tej istej citácie (lazy continuation) a vlastná odpoveď sa vykreslí
+vnútri sivého bloku.
 
 Známe obmedzenie: ak je za citáciou ešte firemný disclaimer, počíta sa ako vlastný
-text a citácia nad ním sa zachová. Patch je v takom prípade konzervatívnejší
-(nechá viac), čo je bezpečnejšie ako mazať obsah.
+text a citácia nad ním sa zachová. Test to explicitne popisuje
+(`test_disclaimer_below_the_quote_keeps_the_quote`). Je to konzervatívnejšie
+zlyhanie — nechá viac, nikdy nezmaže obsah.
 
-## `test_fragments.php` — unit test
+## Spustenie
 
-Bez Mantisu, bez DB, nič nezakladá. Overuje logiku výberu fragmentov.
+Všetko sa púšťa z rootu Mantisu.
 
-```bash
-php plugins/EmailReporting/tests/test_fragments.php
-VERBOSE=1 php plugins/EmailReporting/tests/test_fragments.php   # pôvodné vs. nové správanie
-```
-
-Logika v tomto skripte je kópiou `selectFragments()` z `core/mail_api.php` —
-pri zmene tej metódy treba upraviť aj test.
-
-## `run_e2e.sh` — end-to-end test cez skutočný pipeline
-
-Vygeneruje odpovede na zvolené issue, injektne ich do bežiaceho Mantisu
-(`plugins/ImaticEmailReporting/tests/inject_email.php`), načíta založené poznámky
-z DB a skontroluje ich.
+### Iba unit vrstva (bez Mantisu, bez DB)
 
 ```bash
-plugins/EmailReporting/tests/run_e2e.sh --issue=1443 --from=meno@imatic.cz
-plugins/EmailReporting/tests/run_e2e.sh --issue=1443 --dry-run   # nič nezaloží
+vendor/bin/phpunit -c plugins/EmailReporting/phpunit.xml --testsuite unit
 ```
 
-Voľby: `--issue` (povinné), `--from`, `--container` (`mantis-web`), `--db`
-(`mantis-postgres`), `--db-name` (`bugtracker`), `--db-user` (`postgres`),
-`--label` (text pred číslom issue v subjecte), `--dry-run`.
+Integračná a mailserver vrstva sa v tomto režime samé preskočia, takže výsledok
+zostáva zelený aj na čistom checkoute.
 
-Predpoklady:
+### Integračná vrstva
 
-- beží Docker prostredie projektu,
-- v EmailReporting je zapnuté **Remove all replies from notes** a **Add notes**,
-- odosielateľ nie je z „disposable" domény (`example.com` je odmietnutá,
-  použi napr. `@imatic.cz`),
-- issue existuje; poznámky sa doň reálne založia, po teste ich zmaž.
-
-### Scenáre
-
-| Mail | Očakávanie |
-|---|---|
-| `q1_trailing_quote` | klasická odpoveď — koncová citácia odrezaná |
-| `q2_inline_quote` | inline odpoveď (reportovaný bug) — citácie zachované |
-| `q3_inline_plus_trailing` | inline zachované, koncový blok odrezaný |
-| `q4_html_blockquote` | HTML `<blockquote>` uprostred |
-
-`q4` je informatívny: HTML sa na markdown prevádza len keď je načítaný plugin
-`MantisCoreFormatting` (`core/mail_api.php`, `process_markdown`). Na inštalácii
-s `ImaticFormatting` sa do poznámky dostane surový HTML a citácie sa vôbec
-nespracujú — samostatný problém, nesúvisiaci s týmto patchom.
-
-## `gen_eml.php`
-
-Generátor `.eml` súborov, používa ho `run_e2e.sh`. Dá sa spustiť aj samostatne:
+Potrebuje bežiaci Mantis a jeho DB. Lokálne teda vnútri kontejnera:
 
 ```bash
-php plugins/EmailReporting/tests/gen_eml.php --issue=1443 --out=/tmp/eml --from=meno@imatic.cz
+docker exec -w /var/www/html -e ERP_TESTS_MANTIS=1 mantis-web \
+    vendor/bin/phpunit -c plugins/EmailReporting/phpunit.xml --testsuite integration
 ```
 
-Subject má tvar `[Mantis 0001443]: ...`, čo zodpovedá nastaveniu
-`mail_subject_id_regex = strict`.
+`ERP_TESTS_MANTIS=1` povie bootstrapu, aby naštartoval Mantis. Jediný prípad,
+keď premenná netreba, je spustenie cez root `phpunit.xml` — ten si Mantis
+naštartuje sám. Root konfigurácia ale tieto suity nezahŕňa zámerne: `phpunit.xml`
+v roote je upstream súbor a každý zásah doň by sa musel pri upgrade MantisBT
+prenášať ako patch.
+
+### Mailserver vrstva
+
+Najprv GreenMail na tej istej docker sieti ako Mantis:
+
+```bash
+docker run -d --name erp-greenmail --network mantis_default \
+    -e GREENMAIL_OPTS='-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=mantis:mantis@localhost' \
+    greenmail/standalone:2.1.5
+```
+
+Potom:
+
+```bash
+docker exec -w /var/www/html -e ERP_TESTS_MANTIS=1 -e ERP_GREENMAIL_HOST=erp-greenmail mantis-web \
+    vendor/bin/phpunit -c plugins/EmailReporting/phpunit.xml --testsuite mailserver
+```
+
+Keď na `ERP_GREENMAIL_HOST:3143` nič neodpovedá, celá vrstva sa preskočí.
+
+Premenné: `ERP_GREENMAIL_HOST` (default `127.0.0.1`), `ERP_GREENMAIL_IMAP_PORT`
+(3143), `ERP_GREENMAIL_SMTP_PORT` (3025).
+
+## Ako je to spravené
+
+- `tests/bootstrap.php` — rozhodne, či Mantis štartovať, alebo použiť stuby
+  z `tests/stubs.php`. Každý test si bootstrap vyžiada sám, takže nezáleží,
+  ktorou konfiguráciou sa phpunit spustil.
+- `tests/ERPIntegrationCase.php` — prihlási sa ako vlastný jednorazový účet
+  (žiadne heslá konkrétnej inštalácie), vytvorí si vlastný projekt a kategóriu,
+  vypne odosielanie mailov a DNS kontrolu adries, a na konci všetko zmaže.
+  Raw `.eml` posiela priamo do `process_single_email()` cez mock POP3 servera.
+- `tests/ERPMailserverCase.php` — to isté, ale mail najprv doručí cez SMTP do
+  GreenMailu a potom zavolá `process_mailbox()`, teda reálny Net_IMAP.
+  Vie sa aj pozrieť, čo v mailboxe zostalo.
+- `tests/fixtures/*.eml` — kompletné maily: quoted-printable, 8bit UTF-8,
+  ISO-8859-2, windows-1250, multipart/alternative, multipart s prílohou,
+  text/html s `<blockquote>`.
+
+## Poznámky
+
+- Testy reálne zakladajú issues a poznámky, ale vo vlastnom projekte a pod
+  vlastným jednorazovým účtom, ktoré sa na konci mažú. Po behu by v DB nemalo
+  zostať nič:
+
+  ```sql
+  select id, name from mantis_project_table where name like 'ERP tests%';
+  select id, username from mantis_user_table where username like 'erp_tests_%';
+  ```
+
+  Ak niečo zostane, znamená to, že beh spadol na PHP fatal error a teardown sa
+  nespustil. Zvyšky sa mažú cez API, nie SQL, aby odišli aj naviazané riadky:
+
+  ```bash
+  docker exec -w /var/www/html mantis-web php -r '
+      $g_bypass_headers = 1; require "core.php";
+      config_set_global( "enable_email_notification", OFF );
+      project_delete( <id> ); user_delete( <id> );'
+  ```
+
+- HTML maily: `mail_parse_html` prevedie HTML na markdown len keď formátovací
+  plugin hlási `process_markdown`. Na tejto inštalácii je použitý ImaticFormatting,
+  ale `mail_api.php` sa pýta výhradne MantisCoreFormatting, takže sa prevod
+  nespustí a do poznámky príde surové HTML. Testy tento stav popisujú
+  (`test_html_body_is_kept_as_html_when_conversion_is_off`) a zvlášť testujú aj
+  správne chovanie po zapnutí prevodu. Je to samostatný, starší problém.

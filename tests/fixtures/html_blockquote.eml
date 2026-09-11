@@ -1,0 +1,11 @@
+Return-Path: <matej.brodziansky@imatic.cz>
+From: Matej Brodziansky <matej.brodziansky@imatic.cz>
+To: mantis@imatic.cz
+Subject: [Test Project 0001234]: html odpoved
+Date: Tue, 1 Sep 2026 09:25:00 +0200
+Message-ID: <html-blockquote@imatic.cz>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><body><p>Reagujem priamo v texte:</p><blockquote>Kedy bude hotový deploy?</blockquote><p>V piatok popoludní.</p><blockquote>A čo migrácie DB?</blockquote><p>Tie už bežia na stagingu.</p></body></html>

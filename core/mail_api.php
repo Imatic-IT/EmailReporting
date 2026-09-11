@@ -27,6 +27,7 @@
 	plugin_require_api( 'core/EmailReplyParser/Parser/FragmentDTO.php');
 	plugin_require_api( 'core/EmailReplyParser/Email.php');
 	plugin_require_api( 'core/EmailReplyParser/Fragment.php');
+	plugin_require_api( 'core/mail_body_pure.php');
 
 class ERP_mailbox_api
 {
@@ -437,13 +438,17 @@ class ERP_mailbox_api
 				{
 					if ( $this->_test_only === FALSE )
 					{
+						// The delimiter is needed for the basefolder itself, so it has to be
+						// known whether or not a folder structure is used. Fetching it only
+						// inside the branch below left it undefined for the common case
+						$t_hierarchydelimiter = $this->_mailserver->getHierarchyDelimiter();
+
 						// There does not seem to be a viable api function which removes this plugins dependability on table column names
 						// So if a column name is changed it might cause problems if the code below depends on it.
 						// Luckily we only depend on id, name and enabled
 						if ( $this->_mailbox[ 'imap_createfolderstructure' ] == ON )
 						{
 							$t_projects = project_get_all_rows();
-							$t_hierarchydelimiter = $this->_mailserver->getHierarchyDelimiter();
 
 							// Emails left in the basefolder root were never sorted into a project
 							// folder, so the folder structure says nothing about the target project.
@@ -1793,71 +1798,12 @@ class ERP_mailbox_api
 
 	# --------------------
 	# Process the body of an email to separate signatures and replies
+	#
+	# The actual work lives in core/mail_body_pure.php so it can be unit tested
+	# without a Mantis bootstrap; this only feeds it the mailbox configuration
 	private function parse_email_body( $p_description )
 	{
-		$t_description = $p_description;
-
-		if ( $this->_mail_remove_replies || $this->_mail_strip_signature )
-		{
-			// Lines starting with -- are seen as signatures. EmailReplyParser doesn't use "-----Original Message-----" anyway
-			$t_description = preg_replace('/(?:\\\\{1}---){1,2}-{0,2}\h?[ \S]+\h?(?:\\\\{1}---){1,2}-{0,2}/', '', $t_description );
-
-			$EmailBodyParser = new EmailReplyParser\Parser\EmailParser;
-			$bodyParsed = $EmailBodyParser->parse( $t_description );
-			$bodyfragments = $bodyParsed->getFragments();
-
-			$selectedFragments = $this->selectFragments( $bodyfragments );
-
-			// Fragments are joined with a blank line: without it markdown treats the
-			// line following a "> " quote as part of that quote (lazy continuation)
-			// and the authors own reply gets rendered inside the quote block
-			$t_description = rtrim( (string)implode( "\n\n", $selectedFragments ) );
-		}
-
-		return( $t_description );
-	}
-
-	# --------------------
-	# Select the fragments of interest to us
-	#
-	# Quoted fragments are only dropped when they belong to the trailing reply
-	# block. Quotes in between the authors own text (inline replies) are kept,
-	# otherwise the note loses its context
-	private function selectFragments( array $p_fragments )
-	{
-		$t_last_own_content = -1;
-
-		foreach ( $p_fragments as $t_index => $t_fragment )
-		{
-			if ( !$t_fragment->isEmpty() && !$t_fragment->isQuoted() && !$t_fragment->isSignature() )
-			{
-				$t_last_own_content = $t_index;
-			}
-		}
-
-		$t_selected = array();
-
-		foreach ( $p_fragments as $t_index => $t_fragment )
-		{
-			if ( $t_fragment->isEmpty() )
-			{
-				continue;
-			}
-
-			if ( $this->_mail_strip_signature && $t_fragment->isSignature() )
-			{
-				continue;
-			}
-
-			if ( $this->_mail_remove_replies && $t_fragment->isQuoted() && $t_index > $t_last_own_content )
-			{
-				continue;
-			}
-
-			$t_selected[] = $t_fragment;
-		}
-
-		return( $t_selected );
+		return( erp_parse_email_body( $p_description, $this->_mail_remove_replies, $this->_mail_strip_signature ) );
 	}
 
 	# --------------------

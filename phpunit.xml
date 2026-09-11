@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    EmailReporting test suites.
+
+    Standalone runner for local development:
+        vendor/bin/phpunit -c plugins/EmailReporting/phpunit.xml
+        vendor/bin/phpunit -c plugins/EmailReporting/phpunit.xml (testsuite unit)
+
+    CI runs this same file as its own step (.github/workflows/cd.yml), so a
+    failure here blocks the stage deploy. It is deliberately not folded into the
+    repository root phpunit.xml: that file comes from upstream MantisBT and any
+    edit to it would have to be carried forward as a patch on every upgrade.
+
+    unit        : no Mantis, no database, no network
+    integration : needs an installed Mantis and its database
+    mailserver  : additionally needs a GreenMail instance (see tests/README.md)
+-->
+<phpunit
+    bootstrap="tests/bootstrap.php"
+    colors="true"
+    >
+
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/unit</directory>
+        </testsuite>
+
+        <testsuite name="integration">
+            <directory>tests/integration</directory>
+        </testsuite>
+
+        <testsuite name="mailserver">
+            <directory>tests/mailserver</directory>
+        </testsuite>
+    </testsuites>
+
+</phpunit>

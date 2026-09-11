@@ -1,0 +1,26 @@
+Return-Path: <matej.brodziansky@imatic.cz>
+From: Matej Brodziansky <matej.brodziansky@imatic.cz>
+To: mantis@imatic.cz
+Subject: [Test Project 0001234]: odpoved s prilohou
+Date: Tue, 1 Sep 2026 09:25:00 +0200
+Message-ID: <multipart-attach@imatic.cz>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY42"
+
+--BOUNDARY42
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Prilohu posielam v CSV.
+
+> A co ta tabulka?
+Je v prilohe.
+
+--BOUNDARY42
+Content-Type: text/csv; name="polozky.csv"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="polozky.csv"
+
+aWQ7bmF6b3YKMTtwcnZhIHBvbG96a2EKMjtkcnVoYSBwb2xvemthCg==
+
+--BOUNDARY42--
