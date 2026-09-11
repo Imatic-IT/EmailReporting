@@ -93,7 +93,7 @@ abstract class ERPIntegrationCase extends TestCase
 
 		self::login();
 
-		self::registerPluginDefinitions();
+		self::installPlugin();
 
 		plugin_push_current( 'EmailReporting' );
 		plugin_require_api( 'core/mail_api.php' );
@@ -114,7 +114,18 @@ abstract class ERPIntegrationCase extends TestCase
 			'mail_respect_permissions',
 			'mail_auto_signup',
 			'mail_subject_id_regex',
+			'mail_reporter_id',
 		) );
+
+		# Who reports an email whose sender is not a Mantis user is the account
+		# the plugin's installer created, which differs from installation to
+		# installation. Point it at the throwaway account so that the tests get
+		# the same answer everywhere and leave no trace behind either way.
+		plugin_push_current( 'EmailReporting' );
+		plugin_config_set( 'mail_reporter_id', self::$userId );
+		plugin_pop_current();
+
+		config_flush_cache();
 
 		self::$projectId = self::createProject();
 		self::$categoryId = self::createCategory( self::$projectId );
@@ -155,50 +166,35 @@ abstract class ERPIntegrationCase extends TestCase
 	}
 
 	/**
-	 * Declare what the plugin would declare if it were installed.
+	 * Install the plugin if this Mantis has never had it installed.
 	 *
-	 * On an installation that has never installed EmailReporting - a freshly
-	 * built CI Mantis - nothing has run MantisPlugin::__init(), and the
-	 * production code path walks into two walls:
+	 * A freshly built CI Mantis has no plugins installed, and the production
+	 * path then walks into one wall after another: ERP_mailbox_api reads two
+	 * dozen options in its constructor without passing a default, parse_content()
+	 * signals EVENT_ERP_PARSER_OPTIONS, and the duplicate check queries the
+	 * plugin's own msgids table. Configuration defaults, event declarations and
+	 * the schema all arrive with the installation, so install it rather than
+	 * hand-rolling the three separately - that also means the tests exercise the
+	 * plugin in the state production runs it in.
 	 *
-	 *   - ERP_mailbox_api reads two dozen options in its constructor without
-	 *     passing a default, so the first one raises
-	 *     ERROR_CONFIG_OPT_NOT_FOUND
-	 *   - parse_content() signals EVENT_ERP_PARSER_OPTIONS, which raises
-	 *     ERROR_EVENT_UNDECLARED
-	 *
-	 * Both come from the plugin class itself, so taking them from there gives
-	 * exactly what a stock installation runs with. The hooks are deliberately
-	 * left out: they wire the plugin into Mantis pages, which no test opens.
-	 *
-	 * The configuration is in-memory only, and config_set_global() leaves an
-	 * option that is already set alone, so an installation that does have the
-	 * plugin installed keeps its own configuration and the tests run against
-	 * that instead.
+	 * Nothing to do on a developer machine, where it is installed already; the
+	 * installation is deliberately not undone in the teardown, since the only
+	 * Mantis that gets one here is a throwaway.
 	 */
-	protected static function registerPluginDefinitions()
+	protected static function installPlugin()
 	{
-		if ( plugin_is_loaded( 'EmailReporting' ) )
+		if ( plugin_is_installed( 'EmailReporting' ) )
 		{
 			return;
 		}
 
-		$t_plugin = plugin_register( 'EmailReporting', TRUE );
+		plugin_install( plugin_register( 'EmailReporting' ) );
+		plugin_init( 'EmailReporting' );
 
-		plugin_push_current( 'EmailReporting' );
-		plugin_config_defaults( $t_plugin->config() );
-		plugin_pop_current();
-
-		event_declare_many( $t_plugin->events() );
-
-		# So that a plugin error reports what went wrong rather than a missing
-		# language string, which is what a failing test would otherwise show
-		$t_lang = lang_get_current();
-
-		foreach ( $t_plugin->errors() as $t_name => $t_string )
-		{
-			$GLOBALS['g_lang_strings'][ $t_lang ][ 'MANTIS_ERROR' ][ 'plugin_EmailReporting_' . $t_name ] = $t_string;
-		}
+		self::assertTrue(
+			plugin_is_installed( 'EmailReporting' ),
+			'could not install the plugin into the Mantis the tests run against'
+		);
 	}
 
 	/**
