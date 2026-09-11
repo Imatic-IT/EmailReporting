@@ -93,7 +93,7 @@ abstract class ERPIntegrationCase extends TestCase
 
 		self::login();
 
-		self::registerPluginDefaults();
+		self::registerPluginDefinitions();
 
 		plugin_push_current( 'EmailReporting' );
 		plugin_require_api( 'core/mail_api.php' );
@@ -155,20 +155,28 @@ abstract class ERPIntegrationCase extends TestCase
 	}
 
 	/**
-	 * Make the plugin's own configuration readable.
+	 * Declare what the plugin would declare if it were installed.
 	 *
-	 * ERP_mailbox_api reads two dozen options in its constructor without
-	 * passing a default, so on an installation where the plugin is not
-	 * installed - a freshly built CI Mantis - the very first one raises
-	 * ERROR_CONFIG_OPT_NOT_FOUND.
+	 * On an installation that has never installed EmailReporting - a freshly
+	 * built CI Mantis - nothing has run MantisPlugin::__init(), and the
+	 * production code path walks into two walls:
 	 *
-	 * Applying the defaults the plugin class itself declares gives exactly the
-	 * values a stock installation runs with. It is in-memory only, and
-	 * config_set_global() leaves an option that is already set alone, so an
-	 * installation that does have the plugin installed keeps its own
-	 * configuration and the tests run against that instead.
+	 *   - ERP_mailbox_api reads two dozen options in its constructor without
+	 *     passing a default, so the first one raises
+	 *     ERROR_CONFIG_OPT_NOT_FOUND
+	 *   - parse_content() signals EVENT_ERP_PARSER_OPTIONS, which raises
+	 *     ERROR_EVENT_UNDECLARED
+	 *
+	 * Both come from the plugin class itself, so taking them from there gives
+	 * exactly what a stock installation runs with. The hooks are deliberately
+	 * left out: they wire the plugin into Mantis pages, which no test opens.
+	 *
+	 * The configuration is in-memory only, and config_set_global() leaves an
+	 * option that is already set alone, so an installation that does have the
+	 * plugin installed keeps its own configuration and the tests run against
+	 * that instead.
 	 */
-	protected static function registerPluginDefaults()
+	protected static function registerPluginDefinitions()
 	{
 		if ( plugin_is_loaded( 'EmailReporting' ) )
 		{
@@ -180,6 +188,17 @@ abstract class ERPIntegrationCase extends TestCase
 		plugin_push_current( 'EmailReporting' );
 		plugin_config_defaults( $t_plugin->config() );
 		plugin_pop_current();
+
+		event_declare_many( $t_plugin->events() );
+
+		# So that a plugin error reports what went wrong rather than a missing
+		# language string, which is what a failing test would otherwise show
+		$t_lang = lang_get_current();
+
+		foreach ( $t_plugin->errors() as $t_name => $t_string )
+		{
+			$GLOBALS['g_lang_strings'][ $t_lang ][ 'MANTIS_ERROR' ][ 'plugin_EmailReporting_' . $t_name ] = $t_string;
+		}
 	}
 
 	/**
