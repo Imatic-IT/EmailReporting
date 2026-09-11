@@ -93,6 +93,8 @@ abstract class ERPIntegrationCase extends TestCase
 
 		self::login();
 
+		self::registerPluginDefaults();
+
 		plugin_push_current( 'EmailReporting' );
 		plugin_require_api( 'core/mail_api.php' );
 		plugin_require_api( 'core/config_api.php' );
@@ -150,6 +152,34 @@ abstract class ERPIntegrationCase extends TestCase
 		$this->createdBugs = array();
 
 		parent::tearDown();
+	}
+
+	/**
+	 * Make the plugin's own configuration readable.
+	 *
+	 * ERP_mailbox_api reads two dozen options in its constructor without
+	 * passing a default, so on an installation where the plugin is not
+	 * installed - a freshly built CI Mantis - the very first one raises
+	 * ERROR_CONFIG_OPT_NOT_FOUND.
+	 *
+	 * Applying the defaults the plugin class itself declares gives exactly the
+	 * values a stock installation runs with. It is in-memory only, and
+	 * config_set_global() leaves an option that is already set alone, so an
+	 * installation that does have the plugin installed keeps its own
+	 * configuration and the tests run against that instead.
+	 */
+	protected static function registerPluginDefaults()
+	{
+		if ( plugin_is_loaded( 'EmailReporting' ) )
+		{
+			return;
+		}
+
+		$t_plugin = plugin_register( 'EmailReporting', TRUE );
+
+		plugin_push_current( 'EmailReporting' );
+		plugin_config_defaults( $t_plugin->config() );
+		plugin_pop_current();
 	}
 
 	/**
