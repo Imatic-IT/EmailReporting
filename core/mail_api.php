@@ -1331,11 +1331,17 @@ class ERP_mailbox_api
 
 			$t_file_size = strlen( $p_part[ 'body' ] );
 
-			$duplicity =   imatic_file_is_name_and_size_unique( $t_file_name . $t_extension, $p_bug_id, $t_file_size );
-
-			if ( $duplicity === FALSE )
+			// Supplied by the ImaticEmailReporting plugin. Guarded the same way as
+			// file_link_to_bugnote() below: without the guard, an installation that
+			// does not have that plugin turns every attachment into a fatal error
+			if ( function_exists( 'imatic_file_is_name_and_size_unique' ) )
 			{
-				return( TRUE );
+				$duplicity = imatic_file_is_name_and_size_unique( $t_file_name . $t_extension, $p_bug_id, $t_file_size );
+
+				if ( $duplicity === FALSE )
+				{
+					return( TRUE );
+				}
 			}
 
 			$t_attachment_id = mci_file_add( $p_bug_id, $t_file_name . $t_opt_name . $t_extension, $p_part[ 'body' ], $p_part[ 'ctype' ], 'bug' );
